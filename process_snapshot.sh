@@ -14,11 +14,6 @@ RCSBROOT=/data/jgut/template-analysis/maxit-v10.200-prod-src; export RCSBROOT
 MAXIT_PATH=/data/jgut/template-analysis/maxit-v10.200-prod-src/bin/maxit
 FASPR_PATH=/data/jgut/template-analysis/FASPR/FASPR
 
-function pack_sidechains(){
-	micromamba run -n attnpacker python utils/attnpack.py --inputpdb $1 --outputpath ${2}_temp.pdb --numcores 8
-	tail -n+2 ${2}_temp.pdb| head -n -1 > $2
-}
-
 function get_pdbs() {
 	# $FULL_A $Alphafold_output $A3M_output 
 	# if [ ! -f $1 ]; then
@@ -94,11 +89,6 @@ function prot_MPNN() {
 	cp $CURR $2
 }
 
-function carbon() {
-	pdb_tofasta $1>$2
-	micromamba run -n carbonara python carbonar.py --num_sequences 127 --imprint_ratio 0.5 $1 $2
-}
-
 function align() {
 	pa_dir="$(dirname "$3")"
 	MODEL_SEQ_PATH=${1}.fasta
@@ -116,11 +106,6 @@ function align() {
 		mv $pa_dir/temp $2
 		return 1
 	fi
-}
-
-function relax(){
-    micromamba run -n relaxation pdbfixer $1 --output=${1}_relaxed.pdb --add-atoms=all --keep-heterogens=none
-	micromamba run -n relaxation python amber_relax.py --input ${1}_relaxed.pdb --output ${1}_relaxed.pdb
 }
 
 function score() {
@@ -141,16 +126,6 @@ function score() {
 	else
 		docker run --rm -v $(pwd):$(pwd) registry.scicore.unibas.ch/schwede/openstructure:latest compare-structures --model $MODEL --reference $REFERENCE --output $3 --lddt --local-lddt --bb-lddt --bb-local-lddt --tm-score --rigid-scores --lddt-no-stereochecks
 	fi
-}
-
-function rf_diffusion() {
-	pa_dir="$(dirname "$3")"
-	rm -r $pa_dir
-	micromamba run -n SE3nv /data/jgut/template-analysis/RFdiffusion/scripts/run_inference.py "contigmap.contigs=[${5}-${5}]" "contigmap.provide_seq=[${5}-${5}]" inference.output_prefix=$3 inference.input_pdb=$1 inference.num_designs=$RF_DESIGNS diffuser.partial_T=$PARTIAL_T
-	python select_lowest.py --parentpath $3 --confa $1 --confb $2 --output ${3}_best.pdb
-	pdb_tofasta $1 > ${3}_rec.fasta
-	$FASPR_PATH -i ${3}_best.pdb -o ${3}_best_packed.pdb -s ${3}_rec.fasta
-	cp ${3}_best_packed.pdb $4
 }
 
 function filter_diff() {
