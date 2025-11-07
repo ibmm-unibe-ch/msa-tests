@@ -1,17 +1,17 @@
 import mdtraj as md
 from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
-import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
-import matplotlib.patches as  mpatches
+import matplotlib
 import subprocess
 from pathlib import Path
 from heapq import nsmallest
 from operator import itemgetter
 from difflib import SequenceMatcher
+from md_traj_utils import clean_traj
 
 PAIRS = ['7ahlE4yhdG',
  '1repC2z9oA',
@@ -109,11 +109,6 @@ def reres(input_path, output_path, start):
     subprocess.run(subprocess_string, shell=True, check=True)
     return output_path
 
-def clean_traj(traj):
-    #get rid of hydrogens and last terminal
-    atoms_to_keep = [a.index for a in traj.topology.atoms if str(a.element) != 'hydrogen' and str(a.name) != "OXT"]
-    return traj.atom_slice(atoms_to_keep)
-
 def get_sorted_coords(traj, other_traj=None):
     curr_atoms = []
     curr = [] 
@@ -128,55 +123,64 @@ def get_sorted_coords(traj, other_traj=None):
     curr.sort()
     return np.concatenate([coords for (_, coords) in curr], axis=1), curr_atoms
 
+def make_same_topology(curr, reference, offset):
+    reference_topo = reference.topology
+    xyz=None
+    for _, atom in enumerate(list(reference_topo.atoms)):
+        atom_string = str(atom)
+        atom_name = atom_string.split("-")[1]
+        residue_identifier = atom_string.split("-")[0]
+        atom_resid = int(residue_identifier[3:])+int(offset)
+        if xyz is None:
+            xyz = curr.atom_slice(curr.topology.select(f"name {atom_name} and residue {atom_resid}")).xyz
+        else:
+            xyz = np.concatenate([xyz,curr.atom_slice(curr.topology.select(f"name {atom_name} and residue {atom_resid}")).xyz], axis=1)
+    return md.Trajectory(xyz, reference_topo)
+
 def load_files(input_paths, reference_path):
+    # this is way too over-engineered if both structures have the same PDB overview 
     if reference_path:
         reference = md.load_pdb(reference_path)
-        reference = clean_traj(reference)
-        ref_seq = "".join([str(elem)[:3] for elem in list(reference.topology.residues)])
+        old_ref_seq = "".join([str(elem)[:3] for elem in list(reference.topology.residues)])
         curr = md.load(input_paths[-1])
-        curr = clean_traj(curr)
         curr_seq = "".join([str(elem)[:3] for elem in list(curr.topology.residues)])
-        print(curr_seq)
-        print(ref_seq)
-        match = SequenceMatcher(None, ref_seq, curr_seq).find_longest_match()
-        print(match)
-        print(len(list(reference.topology.atoms)))
-        reference = reference.atom_slice(reference.topology.select(f"resid {match.a/3} to {(match.a+match.size)/3}"))
-        print(len(list(reference.topology.atoms)))
+        match = SequenceMatcher(None, old_ref_seq, curr_seq).find_longest_match()
+        reference = reference.atom_slice(reference.topology.select(f"resid {match.a/3} to {(match.a+match.size)/3-1} and element != H and name != OXT and protein")).center_coordinates()
         ref_seq = "".join([str(elem)[:3] for elem in list(reference.topology.residues)])
-        
+        diff = 1
+        if ref_seq in old_ref_seq:
+            diff += old_ref_seq.index(ref_seq)/3
     inputs = []
     for input in input_paths:
         if str(input)[-3:] == "dcd":
-            print(input)
-            print(reference_path)
-            print(ref_seq)
             curr = md.load_dcd(input, reference_path)
             curr = clean_traj(curr)
             curr_seq = "".join([str(elem)[:3] for elem in list(curr.topology.residues)])
             match = SequenceMatcher(None, ref_seq, curr_seq).find_longest_match()
-            curr = curr.atom_slice(curr.topology.select(f"resid {match.b/3} to {(match.b+match.size)/3}"))
+            curr = curr.atom_slice(curr.topology.select(f"resid {match.b/3} to {(match.b+match.size)/3}")) #/3 because all residue strings have length 3
+            curr[0].save_pdb("traj.pdb")
+            curr = make_same_topology(curr, reference,match.a/3)
             if curr.n_atoms != reference.n_atoms:
                 print(f"problem {reference_path}")
                 return None, None
-            curr = curr.superpose(reference).center_coordinates()
+            curr = curr.superpose(reference)#.center_coordinates()
             inputs.append(curr)
         else:
             curr = md.load(input)
             curr = clean_traj(curr)
             curr_seq = "".join([str(elem)[:3] for elem in list(curr.topology.residues)])
             match = SequenceMatcher(None, ref_seq, curr_seq).find_longest_match()
-            curr = curr.atom_slice(curr.topology.select(f"resid {match.b/3} to {(match.b+match.size)/3-1}"))            
+            if diff < 0:#4rmbA,1mbyA < 0?
+                curr = curr.atom_slice(curr.topology.select(f"resid {match.b/3} to {(match.b+match.size)/3-1}"))            
+            else:
+                curr = curr.atom_slice(curr.topology.select(f"resid {match.b/3} to {(match.b+match.size)/3}"))
+            curr = make_same_topology(curr, reference,int(match.b/3))
             if curr.n_atoms != reference.n_atoms:
                 print(f"problem {reference_path}")
                 return None, None
-            curr = curr.superpose(reference).center_coordinates()
+            curr = curr.superpose(reference)#.center_coordinates()
             inputs.append(curr)
-    combined, names = get_sorted_coords(inputs[0])
-    if len(inputs) > 1:
-        for other in inputs[1:]:
-            combined = np.concatenate([combined,get_sorted_coords(other,inputs[0])[0]], axis=0)        
-    return combined, names
+    return md.join(inputs, check_topology=True)
 
 def compute_PCA(coords, n_components=2):
     pca = PCA(n_components=n_components, random_state = 12)
@@ -184,15 +188,6 @@ def compute_PCA(coords, n_components=2):
     transformed = pca.fit_transform(coords.reshape(frames, atoms * dims))
     print(f"Explained variance of training: {pca.explained_variance_ratio_}")
     return transformed, pca
-
-def pickle_obj(object, save_path):
-    with open(save_path, 'wb') as handle:
-        pickle.dump(object, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-def unpickle_obj(pickle_path):
-    with open(pickle_path, "rb") as file:
-        obj = pickle.load(file) 
-    return obj
 
 def make_plot(point_list, plt_title,num_predictions=1,labels=None ,save_path=None, variance=None):
     if not (labels is None):
@@ -223,22 +218,23 @@ def make_plot(point_list, plt_title,num_predictions=1,labels=None ,save_path=Non
 def make_sns_plot(point_list, plt_title,num_predictions=1, save_path=None, variance=None):
     pca = pd.DataFrame(point_list[:-num_predictions-1], columns=["PC1", "PC2"])
     #sns.jointplot(data=pca, x=f"PC1", y=f"PC2", kind="kde", palette=["teal"], legend="Simulation", fill=True, alpha=0.8, height=3.33)
-    sns.kdeplot(data=pca, x=f"PC1", y=f"PC2", legend="Simulation", fill=True, alpha=0.8)
+    sns.kdeplot(data=pca, x=f"PC1", y=f"PC2", legend="Simulation", fill=True, alpha=0.8, color="#808080")
+    matplotlib.rcParams["axes.spines.right"] = False
+    matplotlib.rcParams["axes.spines.top"] = False
+    plt.rcParams['font.size'] = 20
+    plt.setp(plt.gca().spines.values(), linewidth=3)
     if variance is None:
         plt.xlabel(f"PC1")
         plt.ylabel(f"PC2")
     else:
-        plt.xlabel(f"PC1 [variance {variance[0]*100:.2f}%]")
-        plt.ylabel(f"PC2 [variance {variance[1]*100:.2f}%]")
-    #plt.scatter(point_list[0:-num_predictions,0], point_list[0:-num_predictions,1], alpha=0.01, label="Simulation")
-    plt.scatter(point_list[-num_predictions:,0], point_list[-num_predictions:,1], label="Prediction", c="orange")
-    plt.scatter(point_list[0,0], point_list[0,1], label="Start", c="green")
-    handles = [mpatches.Patch(facecolor="green", label="Start"), mpatches.Patch(facecolor="blue", label="Simulation"), mpatches.Patch(facecolor="orange", label="Prediction")]
-    plt.legend(handles=handles)
+        plt.gca().set_xlabel(f"PC1 [variance {variance[0]*100:.2f}%]", fontsize=20)
+        plt.gca().set_xlabel(f"PC2 [variance {variance[1]*100:.2f}%]", fontsize=20)
+    plt.scatter(point_list[-num_predictions:,0], point_list[-num_predictions:,1], label="Prediction", c="#90EE90", s=60)
+    plt.scatter(point_list[0,0], point_list[0,1], label="Experiment", c="#8080FF", s=60)
     plt.title(plt_title)
     if save_path:
         Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(save_path, transparent=True, bbox_inches='tight')
+        plt.savefig(save_path, dpi=600, transparent=True, bbox_inches='tight')
     plt.clf()
 
 def find_neighbours(all_points, points_of_interest, num_neighbours):
@@ -248,31 +244,17 @@ def find_neighbours(all_points, points_of_interest, num_neighbours):
     indices.append(neigh.kneighbors(points_of_interest, num_neighbours)[1])
     return indices
 
-def get_pdb_from_traj(traj, index, topology, save_path=None):
-    if isinstance(index, int):
-        xyz = traj[index]
-    else:
-        xyz = traj
-    if isinstance(topology, list):
-        topo = md.Topology()
-        chain = topo.add_chain()
-        residues = {}
-        for _, atom in enumerate(topology):
-            name, element, res_id = atom
-            if not(str(res_id) in residues):
-                residue = topo.add_residue(str(res_id), chain)
-                residues[str(res_id)] = residue
-            residue = residues[str(res_id)]
-            topo.add_atom(name, element, residue)
-        topology = topo
-    pdb = md.Trajectory(xyz, topology)
+def get_pdb_from_traj(traj, index, save_path=None):
+    temp = "temp.pdb"
+    pdb = traj[index]   
     if save_path:
         Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-        pdb.save_pdb(save_path)
-    return pdb#, topology
+        pdb.save_pdb(temp)
+        subprocess_string = f"pdb_rplresname -HIP:HIS {temp}| pdb_rplresname -HIE:HIS | pdb_rplresname -NLE:LEU > {save_path}"
+        subprocess.run(subprocess_string, shell=True, check=True)
+    return pdb
 
-def get_closest_rmsd(traj_coords, topology, ref_frame=-1, n=10):
-    traj = get_pdb_from_traj(traj_coords, None, topology)
+def get_closest_rmsd(traj, ref_frame=-1, n=10):
     rmsds = md.rmsd(traj, traj, ref_frame)
     smallest_with_indices = nsmallest(n, enumerate(rmsds), key=itemgetter(1))
     return smallest_with_indices

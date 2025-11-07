@@ -1,15 +1,18 @@
 import mdtraj as md
-from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
 from pathlib import Path
-import pickle
+from utils import pickle_obj, unpickle_obj, run_single_seq, compute_PCA
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import matplotlib.patches as  mpatches
-from sklearn.cluster import HDBSCAN
-import subprocess
+import matplotlib.lines as mlines
+from heapq import nsmallest
+from operator import itemgetter
+from Bio import PDB
+from itertools import combinations
+
 
 # Set font and tick parameters
 plt.rcParams.update({
@@ -26,7 +29,10 @@ def clean_traj(traj):
     atoms_to_keep = [a.index for a in traj.topology.atoms if str(a.element) != 'hydrogen' and str(a.name) != "OXT"]
     return traj.atom_slice(atoms_to_keep)
 
-def get_sorted_coords(traj, other_traj=None):
+def clean_traj_c_alpha(traj):
+    return traj.atom_slice(traj.topology.select(f"name CA"))
+
+def get_sorted_coords(traj, other_traj=None, c_alpha=False):
     curr_atoms = []
     curr = [] 
     for it, atom in enumerate(traj.topology.atoms):
@@ -36,58 +42,78 @@ def get_sorted_coords(traj, other_traj=None):
         other = []
         for atom in other_traj.topology.atoms:
             other.append(str(atom.residue.index).zfill(5)+str(atom))
-        assert set([name for name, xyz in curr]) == set(other), f"Different topologies supplied to get_sorted_coords of size: {len(curr)} vs. {len(other)}"
+        if not c_alpha:
+            assert set([name for name, xyz in curr]) == set(other), f"Different topologies supplied to get_sorted_coords of size: {len(curr)} vs. {len(other)}"
     curr.sort()
     return np.concatenate([coords for (name, coords) in curr], axis=1), curr_atoms
 
-def load_files(input_paths, reference_path):
-    if reference_path:
-        reference = md.load_pdb(reference_path)
+def load_files(input_paths, reference_path, c_alpha=False):
+    reference = None
+    if reference_path and not str(reference_path).endswith(".prmtop"):
+        reference = md.load(reference_path)
         reference = clean_traj(reference)
+        if c_alpha:
+            reference = clean_traj_c_alpha(reference)
     inputs = []
     for input in input_paths:
-        if str(input)[-3:] == "dcd":
+        if str(input).endswith("dcd"):
             curr = md.load_dcd(input, reference_path)
-            curr = clean_traj(curr)
+            curr = clean_traj(curr.atom_slice(curr.top.select("protein and not element H and not name OXT")))
+            if c_alpha:
+                curr = clean_traj_c_alpha(curr)
+            if reference is None:
+                reference = curr[0]
             curr = curr.superpose(reference).center_coordinates()
             inputs.append(curr)
         else:
             curr = md.load(input)
-            curr = clean_traj(curr)
+            curr = clean_traj(curr.atom_slice(curr.top.select("protein and not element H and not name OXT")))
+            if c_alpha:
+                curr = clean_traj_c_alpha(curr)
+            if reference is None:
+                reference = curr[0]#.atom_slice(curr.top.select("protein and not element H and not name OXT"))
             curr = curr.superpose(reference).center_coordinates()
             inputs.append(curr)
-    combined, names = get_sorted_coords(inputs[0])
+    combined, names = get_sorted_coords(inputs[0], c_alpha=c_alpha)
     if len(inputs) > 1:
         for other in inputs[1:]:
-            combined = np.concatenate([combined,get_sorted_coords(other,inputs[0])[0]], axis=0)        
+            combined = np.concatenate([combined,get_sorted_coords(other,inputs[0], c_alpha=c_alpha)[0]], axis=0)        
     return combined, names
 
-def compute_PCA(coords, n_components=2):
-    pca = PCA(n_components=n_components, random_state = 12)
-    frames, atoms, dims = coords.shape
-    transformed = pca.fit_transform(coords.reshape(frames, atoms * dims))
-    print(f"Explained variance of training: {pca.explained_variance_ratio_}")
-    return transformed, pca
+def take_c_alpha(input_paths,reference_path):
+    reference = md.load(reference_path)
+    reference = clean_traj(reference)
+    reference = clean_traj_c_alpha(reference)
+    c_alpha_coords = []
+    for input_path in input_paths:
+        if str(input_path)[-3:] == "dcd":
+            curr = md.load_dcd(input_path, reference_path)
+        else:
+            curr = md.load(input_path)
+        curr = clean_traj(curr)
+        curr = clean_traj_c_alpha(curr)
+        curr = curr.superpose(reference).center_coordinates()
+        c_alpha_coords.append(curr.xyz)
+    return np.concatenate(c_alpha_coords)
 
-def pickle_obj(object, save_path):
-    with open(save_path, 'wb') as handle:
-        pickle.dump(object, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-def unpickle_obj(pickle_path):
-    with open(pickle_path, "rb") as file:
-        obj = pickle.load(file) 
-    return obj
-
-def make_hdbscan(transformed):
-    hdbscan = HDBSCAN(min_cluster_size=50, cluster_selection_epsilon=0.5, leaf_size=100, n_jobs=32, store_centers="medoid")
-    clusters = hdbscan.fit_predict(transformed)
-    medoids = hdbscan.medoids_
-    return clusters, medoids
+def get_plddts(file_name):
+    parser = PDB.PDBParser(PERMISSIVE=1)
+    structure = parser.get_structure("1CUR",file_name)
+    model = next(iter(structure))
+    chain = next(iter(model))
+    plddts = []
+    for residue in chain:
+        plddts.append(float(next(iter(residue)).get_bfactor()))
+    return sum(plddts)/len(plddts)
 
 def make_deshaw_plot(point_list, plt_title, medoids=None, labels=None ,save_path=None, variance=None):
+    plt.rcParams.update({'axes.spines.right' : False,})    
     plt.scatter(point_list[:,0], point_list[:,1], alpha=0.1, c=labels)
-    if not (labels is None):
-        plt.scatter(medoids[:,0], medoids[:,1], c=range(len(medoids)), marker="*", edgecolors="red", s=50)
+    if not (medoids is None):
+        if len(medoids[0])>2:
+            plt.scatter([medoid[0] for medoid in medoids], [medoid[1] for medoid in medoids], c=[medoid[2] for medoid in medoids], marker="*", edgecolors="black", s=50)
+        else:
+            plt.scatter([medoid[0] for medoid in medoids], [medoid[1] for medoid in medoids], c=len(medoids), marker="*", edgecolors="black", s=50)
     if variance is None:
         plt.xlabel(f"PC1")
         plt.ylabel(f"PC2")    
@@ -95,6 +121,10 @@ def make_deshaw_plot(point_list, plt_title, medoids=None, labels=None ,save_path
         plt.xlabel(f"PC1 [variance {variance[0]*100:.2f}%]")
         plt.ylabel(f"PC2 [variance {variance[1]*100:.2f}%]")
     plt.title(plt_title)
+    if not (medoids is None) and len(medoids[0])>2:
+        black_star = mlines.Line2D([], [], color='black', marker='*', linestyle='None', label='Medoid')
+        handles = [black_star,mpatches.Patch(facecolor=medoids[0][2], label="Major in"), mpatches.Patch(facecolor=medoids[1][2], label="Minor in"), mpatches.Patch(facecolor=medoids[2][2], label="Major out"), mpatches.Patch(facecolor=medoids[3][2], label="Minor out")]
+        plt.legend(handles=handles)    
     plt.tight_layout()
     Path(save_path).parent.mkdir(parents=True, exist_ok=True)
     if save_path:
@@ -103,8 +133,8 @@ def make_deshaw_plot(point_list, plt_title, medoids=None, labels=None ,save_path
     plt.clf()
 
 def make_sns_plot(point_list, plt_title,num_predictions=1, save_path=None, variance=None):
+    plt.rcParams.update({'axes.spines.right' : False,})    
     pca = pd.DataFrame(transformed[:-num_predictions-1], columns=["PC1", "PC2"])
-    #sns.jointplot(data=pca, x=f"PC1", y=f"PC2", kind="kde", palette=["teal"], legend="Simulation", fill=True, alpha=0.8, height=3.33)
     sns.kdeplot(data=pca, x=f"PC1", y=f"PC2", palette=["teal"], legend="Simulation", fill=True, alpha=0.8)
     if variance is None:
         plt.xlabel(f"PC1")
@@ -112,7 +142,6 @@ def make_sns_plot(point_list, plt_title,num_predictions=1, save_path=None, varia
     else:
         plt.xlabel(f"PC1 [variance {variance[0]*100:.2f}%]")
         plt.ylabel(f"PC2 [variance {variance[1]*100:.2f}%]")
-    #plt.scatter(point_list[0:-num_predictions,0], point_list[0:-num_predictions,1], alpha=0.01, label="Simulation")
     plt.scatter(point_list[-num_predictions,0], point_list[-num_predictions,1], label="Prediction", c="orange")
     plt.scatter(point_list[0,0], point_list[0,1], label="Start", c="green")
     handles = [mpatches.Patch(facecolor="green", label="Start"), mpatches.Patch(facecolor="blue", label="Simulation"), mpatches.Patch(facecolor="orange", label="Prediction")]
@@ -145,30 +174,89 @@ def get_pdb_from_traj(traj, index, topology, save_path=None):
             residue = residues[str(res_id)]
             topo.add_atom(name, element, residue)
         topology = topo
-    pdb = md.Trajectory(xyz, topology)
+    if isinstance(xyz, np.ndarray):
+        pdb = md.Trajectory(xyz, topology)
+    else:
+        pdb=xyz
     if save_path:
         pdb.save_pdb(save_path)
     return pdb
 
-def ost_score(model_path, reference_path, output_path):
-    BESTNAME="*_unrelaxed_rank_001*seed_[0-9][0-9][0-9][0-9].pdb"
-    if model_path.is_dir():
-        model_path = list(model_path.glob(BESTNAME))[0]
-    if reference_path.is_dir():
-        reference_path = list(reference_path.glob(BESTNAME))[0]
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    input_string = f"docker run --rm -v $(pwd):$(pwd) registry.scicore.unibas.ch/schwede/openstructure:latest compare-structures --model {model_path} --reference {reference_path} --output {output_path} --lddt --local-lddt --bb-lddt --bb-local-lddt --tm-score --rigid-scores --lddt-no-stereochecks"
-    subprocess.run(input_string, shell=True, check=True)
+def best_hummer_q(traj, native):
+    """Compute the fraction of native contacts according the definition from
+    Best, Hummer and Eaton [1]
+    
+    Parameters
+    ----------
+    traj : md.Trajectory
+        The trajectory to do the computation for
+    native : md.Trajectory
+        The 'native state'. This can be an entire trajecory, or just a single frame.
+        Only the first conformation is used
+        
+    Returns
+    -------
+    q : np.array, shape=(len(traj),)
+        The fraction of native contacts in each frame of `traj`
+        
+    References
+    ----------
+    ..[1] Best, Hummer, and Eaton, "Native contacts determine protein folding
+          mechanisms in atomistic simulations" PNAS (2013)
+    """
+    
+    BETA_CONST = 50  # 1/nm
+    LAMBDA_CONST = 1.8
+    NATIVE_CUTOFF = 0.45  # nanometers
+    
+    # get the indices of all of the heavy atoms
+    heavy = native.topology.select_atom_indices('heavy')
+    # get the pairs of heavy atoms which are farther than 3
+    # residues apart
+    heavy_pairs = np.array(
+        [(i,j) for (i,j) in combinations(heavy, 2)
+            if abs(native.topology.atom(i).residue.index - \
+                   native.topology.atom(j).residue.index) > 3])
+    
+    # compute the distances between these pairs in the native state
+    #print(f"heavy paris: {max(heavy_pairs)}")
+    heavy_pairs_distances = md.compute_distances(native[0], heavy_pairs)[0]
+    # and get the pairs s.t. the distance is less than NATIVE_CUTOFF
+    native_contacts = heavy_pairs[heavy_pairs_distances < NATIVE_CUTOFF]
+    print("Number of native contacts", len(native_contacts))
+    
+    # now compute these distances for the whole trajectory
+    r = md.compute_distances(traj, native_contacts)
+    # and recompute them for just the native state
+    r0 = md.compute_distances(native[0], native_contacts)
+    
+    q = np.mean(1.0 / (1 + np.exp(BETA_CONST * (r - LAMBDA_CONST * r0))), axis=1)
+    return q  
 
-def run_single_pipeline(input_file, output_path):
-    input_string = f"bash process_snapshot.sh {input_file} {output_path}"
-    subprocess.run(input_string, shell=True, check=True)
+def compute_all_rmsds(simulation, predictions, FRAMES_TO_AVERAGE):
+    combined_traj = md.join([simulation, predictions])
+    all_rmsds = dict()
+    for index in range(len(predictions)):
+        rmsds = md.rmsd(combined_traj, predictions,index)
+        all_rmsds[index] = nsmallest(len(predictions)+FRAMES_TO_AVERAGE, enumerate(rmsds), key=itemgetter(1))
+    return all_rmsds
 
-def run_single_seq(input_file, output_path):
-    input_string = f"pdb_tofasta {input_file} > single_seq_input.a3m"
-    subprocess.run(input_string, shell=True, check=True)
-    input_string = f"colabfold_batch --overwrite-existing-results --random-seed 6217 --num-seeds 1 --num-models 5 --num-recycle 3 --num-relax 0 single_seq_input.a3m {output_path}"
-    subprocess.run(input_string, shell=True, check=True)
+def rmsd(curr, reference):
+    return np.sqrt(((curr-reference)**2).sum(-1).mean())
+
+def compute_rmsds(np_traj, index, n, names1, names2=None, other2=None, only_c_alpha=False):
+    if only_c_alpha and names1:
+        c_alphas1 = [it for it, case in enumerate(names1) if case[0]=="CA"]
+        np_traj1 = np_traj[0:other2,c_alphas1,:]
+        if not other2 is None:
+            c_alphas2 = [it for it, case in enumerate(names2) if case[0]=="CA"]
+            np_traj2 = np_traj[other2:,c_alphas2,:]
+            np_traj1.append(np_traj2)
+        np_traj = np_traj1
+    reference = np_traj[index]
+    rmsds = [rmsd(curr, reference) for curr in np_traj]
+    smallest_with_indices = nsmallest(n, enumerate(rmsds), key=itemgetter(1))
+    return smallest_with_indices
 
 if __name__ == "__main__":
     DESHAW_PATH = Path("/scratch/alphafold_database/DEShaw_simulations/")
@@ -177,39 +265,18 @@ if __name__ == "__main__":
         protein = protein_string[:-len("-protein")]
         output_path = Path("/data/jgut/msa-tests/deshaw")/protein
         output_path.mkdir(parents=True, exist_ok=True)
-        #pca_file = output_path/"pca.pkl"
-        #hdb_scan_file = output_path/"hdb.pkl"
-        #plot_file = Path("visualisations")/f"{protein}.pdf"
-        #traj_files = list((protein_path/protein_string).glob("*.dcd"))
+        pca_file = output_path/"pca.pkl"
+        plot_file = Path("visualisations")/f"{protein}.pdf"
+        traj_files = list((protein_path/protein_string).glob("*.dcd"))
         top_file = protein_path/protein_string/f"{protein_string}.pdb"
-        #traj, topology = load_files(traj_files,top_file)
-        #if not pca_file.exists():
-        #    transformed, pca = compute_PCA(traj,2)
-        #    pickle_obj((transformed, pca), pca_file)
-        #else:
-        #    transformed, pca = unpickle_obj(pca_file) 
-        #sampled = transformed[::100]
-        #if not hdb_scan_file.exists():
-        #    clusters, medoids = make_hdbscan(sampled)
-        #    pickle_obj((clusters, medoids), hdb_scan_file)
-        #else:
-        #    (clusters, medoids) = unpickle_obj(hdb_scan_file)
-        #if not plot_file.exists():
-        #    make_deshaw_plot(sampled, protein.replace("-", " "), medoids=medoids, labels=clusters ,save_path=plot_file, variance=pca.explained_variance_ratio_)
+        traj, topology = load_files(traj_files,top_file)
+        if not pca_file.exists():
+            transformed, pca = compute_PCA(traj,2)
+            pickle_obj((transformed, pca), pca_file)
+        else:
+            transformed, pca = unpickle_obj(pca_file) 
+        sampled = transformed[::100]
         analysis_path = output_path/"strucs"
         analysis_path.mkdir(parents=True, exist_ok=True)
         run_single_seq(top_file, analysis_path/"single_seq")
-        #for it, medoid in enumerate(medoids):
-        #    ind = np.where(sampled==medoid)[0]
-        #    get_pdb_from_traj(traj, ind, topology, analysis_path/f"medoid_{it}_original.pdb")
-        #    run_single_pipeline(analysis_path/f"medoid_{it}_original.pdb", analysis_path/f"medoid_{it}_inverse_folded_dir")
-        #    num_medoids = len(medoids)
-        #scores_path = output_path/"scores"
-        #scores_path.mkdir(parents=True, exist_ok=True)
-        #for i in range(num_medoids):
-        #    for j in range(num_medoids):
-        #        if i < j:
-        #            ost_score(analysis_path/f"medoid_{i}_original.pdb",analysis_path/f"medoid_{j}_original.pdb", scores_path/f"o_{i}_o_{j}.json")
-        #            ost_score(analysis_path/f"medoid_{i}_inverse_folded_dir",analysis_path/f"medoid_{j}_inverse_folded_dir", scores_path/f"i_{i}_i_{j}.json")
-        #        ost_score(analysis_path/f"medoid_{i}_original.pdb",analysis_path/f"medoid_{j}_inverse_folded_dir", scores_path/f"o_{i}_i_{j}.json")
         
