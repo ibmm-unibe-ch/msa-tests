@@ -102,7 +102,14 @@ if __name__=='__main__':
 
     else:
         eps_to_select = args.eps_val
-    # perform actual clustering
+    
+    # There aren't any clusters
+    if max(n_clusters) < 2:
+        tmp = df.iloc[:-1]
+        tmp = pd.concat([query_, tmp], axis=0)
+        write_fasta(tmp.SequenceName.tolist(), tmp.sequence.tolist(), outfile=args.o+'/'+args.keyword+'_000.a3m')
+
+    # perform actual clustering    
     clustering = DBSCAN(eps=eps_to_select, min_samples=args.min_samples).fit(ohe_seqs)
     df['dbscan_label'] = clustering.labels_
     clusters = [x for x in df.dbscan_label.unique() if x>=0]

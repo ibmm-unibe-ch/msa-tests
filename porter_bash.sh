@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=0
 SEEDS=1
 MODELS=5
 RECYCLES=3
@@ -82,6 +82,7 @@ function msa_to_input() {
 
 function fold_alpha3() {
 	msa_to_input $1 ${1%????}/af_input/fold_input.json
+	docker context use default
 	docker run --runtime=nvidia --gpus device=$CUDA_VISIBLE_DEVICES --rm --volume ${1%????}/af_input:/root/af_input --volume $2:/root/af_output --volume /scratch/alphafold_database/alphafold3_weights:/root/models --volume /scratch/alphafold_database:/root/public_databases alphafold3 python run_alphafold.py --json_path=/root/af_input/fold_input.json --model_dir=/root/models --output_dir=/root/af_output
 	declare -a numbers=("0" "1" "2" "3" "4") 
 	for number in "${numbers[@]}"
@@ -93,7 +94,7 @@ function fold_alpha3() {
 
 function prot_MPNN() {
 	rm -r ${2}_folder
-	micromamba run -n proteinmpnn python ~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py --num_seq_per_target 128 --sampling_temp $SAMPLING_TEMP --pdb_path $1 --pdb_path_chains A --out_folder ${2}_folder --seed $SEED --batch_size 1 
+	micromamba run -n RF2 python ~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py --num_seq_per_target 128 --sampling_temp $SAMPLING_TEMP --pdb_path $1 --pdb_path_chains A --out_folder ${2}_folder --seed $SEED --batch_size 1 
 	CURR=$(find ${2}_folder/seqs | tail -1)
 	cp $CURR $2
 }
@@ -185,7 +186,7 @@ function af_cluster() {
 	python utils/AF-cluster.py $1 -i $2 -o $3
 }
 
-readarray -t array < porter_data_rest_af_cluster.csv
+readarray -t array < leftover_singles.csv
 for a in "${array[@]}"; do
 	echo $a |
 	 while IFS=, read -r ID_A ID_B DATE_A DATE_B LENGTH_A LENGTH_B TYPE OFFSET_A OFFSET_B
@@ -240,7 +241,7 @@ for a in "${array[@]}"; do
 	 	SCORE_APROT_RF=$CURR_PATH/score_Aprot_rf.json
 	 	SCORE_BPROT_RF=$CURR_PATH/score_Bprot_rf.json
 	 	SCORE_RPROT_RF=$CURR_PATH/score_Rprot_rf.json
-	 	# All models
+ 		# All models
 	 	PROT_MPNN_CONF_A_DIR=$CURR_PATH/${ID_A}_conf_dir
 	 	mkdir -p $PROT_MPNN_CONF_A_DIR
 	 	PROT_MPNN_CONF_B_DIR=$CURR_PATH/${ID_B}_conf_dir
@@ -312,11 +313,11 @@ for a in "${array[@]}"; do
 		fold_rosetta $A3M_file_B ${ALPHAFOLD_B}/"Rosetta.pdb"
 	 	echo "Folding Prot $ID_A"
 		fold_alpha2 $PROT_MPNN_A3M_A $PROT_MPNN_A
-	 	fold_alpha3 $PROT_MPNN_A3M_A $PROT_MPNN_A_DIR_AF3
+#	 	fold_alpha3 $PROT_MPNN_A3M_A $PROT_MPNN_A_DIR_AF3
 	 	fold_rosetta $PROT_MPNN_A3M_A ${PROT_MPNN_A}/Rosetta.pdb
 	 	echo "Folding Prot $ID_B"
 		fold_alpha2 $PROT_MPNN_A3M_B $PROT_MPNN_B
-	 	fold_alpha3 $PROT_MPNN_A3M_B $PROT_MPNN_B_DIR_AF3
+#	 	fold_alpha3 $PROT_MPNN_A3M_B $PROT_MPNN_B_DIR_AF3
 	 	fold_rosetta $PROT_MPNN_A3M_B ${PROT_MPNN_B}/Rosetta.pdb
 		cut_pdb ${ALPHAFOLD_A}/Rosetta.pdb $ROSETTAFOLD_CONF_A $OFFSET_A $LENGTH_A
 		cut_pdb ${ALPHAFOLD_B}/Rosetta.pdb $ROSETTAFOLD_CONF_B $OFFSET_B $LENGTH_B
@@ -327,14 +328,15 @@ for a in "${array[@]}"; do
 		score $PROT_MPNN_CONF_A_RF $FULL_A $SCORE_APROT_RF
 		score $PROT_MPNN_CONF_B_RF $FULL_B $SCORE_BPROT_RF
 		ALIGNMENT_A=${FULL_A%????}_align.fasta
+		pdb_tofasta $FULL_A >$FULL_A.fasta
 		cat $FULL_A.fasta $FULL_A3M_A > temp_A.fasta
 		clustalo -i temp_A.fasta --outfmt=a2m --wrap=99999 > $ALIGNMENT_A
-		python utils/get_secstrucs.py --input_pdb $FULL_A --output_json ${FULL_A%?????}_sec_struc.json --alignment_path $ALIGNMENT_A --cut_start $OFFSET_A --cut_length $LENGTH_A
+		python utils/get_secstrucs.py --input_pdb $FULL_A --output_json ${FULL_A%????}_sec_struc.json --alignment_path $ALIGNMENT_A --cut_start $OFFSET_A --cut_length $LENGTH_A
 		ALIGNMENT_B=${FULL_B%????}_align.fasta
+		pdb_tofasta $FULL_B >$FULL_B.fasta
 		cat $FULL_B.fasta $FULL_A3M_B > temp_B.fasta
 		clustalo -i temp_B.fasta --outfmt=a2m --wrap=99999 > $ALIGNMENT_B
 		python utils/get_secstrucs.py --input_pdb $FULL_B --output_json ${FULL_B%????}_sec_struc.json --alignment_path $ALIGNMENT_B --cut_start $OFFSET_B --cut_length $LENGTH_B
-
 		python utils/get_secstrucs.py --input_pdb $PROT_MPNN_CONF_A_RF --output_json ${PROT_MPNN_CONF_A_RF%????}_sec_struc.json
 		python utils/get_secstrucs.py --input_pdb $PROT_MPNN_CONF_B_RF --output_json ${PROT_MPNN_CONF_B_RF%????}_sec_struc.json
 	 	# AF2, Natural models
@@ -348,7 +350,7 @@ for a in "${array[@]}"; do
 			FOUND_FILENAME=$(basename $FOUND_FILE)
 			cut_pdb $FOUND_FILE $ALPHAFOLD_CONF_B/$FOUND_FILENAME $OFFSET_B $LENGTH_B
 			score $ALPHAFOLD_CONF_B/$FOUND_FILENAME $FULL_B $AF2_SCORE_DIR_B/${FOUND_FILENAME%????}_score.json
- 			python get_secstrucs.py --input_pdb $ALPHAFOLD_CONF_B/$FOUND_FILENAME --output_json $AF2_SCORE_DIR_B/${FOUND_FILENAME%????}_sec_struc.json
+ 			python utils/get_secstrucs.py --input_pdb $ALPHAFOLD_CONF_B/$FOUND_FILENAME --output_json $AF2_SCORE_DIR_B/${FOUND_FILENAME%????}_sec_struc.json
 		done
 	 	# AF2, ProteinMPNN models
 		for FOUND_FILE in $PROT_MPNN_A/*rank_00[1-5]*.pdb; do
@@ -400,7 +402,6 @@ for a in "${array[@]}"; do
 			cut_pdb $FOUND_FILE $PROT_MPNN_CONF_B_DIFF/$FOUND_FILENAME $OFFSET_B $LENGTH_B
 			score $PROT_MPNN_CONF_B_DIFF/$FOUND_FILENAME $FULL_B $SCORE_B_DIFF/${FOUND_FILENAME%????}_score.json
 		done
-	
 		AF_CLUSTERS_A=$CURR_PATH/${ID_A}_clusters
 		AF_CLUSTERS_B=$CURR_PATH/${ID_B}_clusters
 		mkdir -p $AF_CLUSTERS_A

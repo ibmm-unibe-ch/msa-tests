@@ -6,7 +6,7 @@ do
     tail -n +3 $file >> combined.a3m
 done
 
- alignment-mode 3 --> https://mmseqs.com/latest/userguide.pdf page 73
+# alignment-mode 3 --> https://mmseqs.com/latest/userguide.pdf page 73
 mmseqs easy-search combined.a3m /scratch/alphafold_database/mmseqs_databases/uniprot/uniprot_db filtered_out_99 mmseqs_tmp --min-seq-id 0.99 --threads 32 --alignment-mode 3 --format-output "query,qseq" --max-accept 1
 mmseqs easy-search combined.a3m /scratch/alphafold_database/mmseqs_databases/uniprot/uniprot_db filtered_out_95 mmseqs_tmp --min-seq-id 0.95 --threads 32 --alignment-mode 3 --format-output "query,qseq" --max-accept 1
 mmseqs easy-search combined.a3m /scratch/alphafold_database/mmseqs_databases/uniprot/uniprot_db filtered_out_90 mmseqs_tmp --min-seq-id 0.9 --threads 32 --alignment-mode 3 --format-output "query,qseq" --max-accept 1
