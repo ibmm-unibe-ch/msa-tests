@@ -1,16 +1,16 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=6
 SEEDS=1
 MODELS=5
 RECYCLES=3
 BESTNAME="*_unrelaxed_rank_001*seed_[0-9][0-9][0-9][0-9].pdb"
 PARTIAL_T=20
 RF_DESIGNS=10
-SAMPLING_TEMP=0.5
+SAMPLING_TEMP=1.0
 SEED=6217
-CONF_A=/data/jgut/msa-tests/porter/1miqB1qs8B/1qs8B_conf.pdb
-PARENT_PATH=/data/jgut/msa-tests/test
+CONF_A=/data/jgut/msa-tests/rebuttal/znt8/6xpf_start.pdb
+PARENT_PATH="$(dirname "$CONF_A")/$(basename "${CONF_A%.*}")"
 HHFILTER_SIMILARITY=99
 BLAST_SIMILARITY=100
 
@@ -41,7 +41,7 @@ function fold_alpha() {
 
 function prot_MPNN() {
 	rm -r ${2}_folder
-	micromamba run -n proteinmpnn python ~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py --num_seq_per_target 128 --sampling_temp $SAMPLING_TEMP --pdb_path $1 --pdb_path_chains A --out_folder ${2}_folder --seed $SEED --batch_size 1 
+	micromamba run -n SE3nv python ~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py --num_seq_per_target 128 --sampling_temp $SAMPLING_TEMP --pdb_path $1 --pdb_path_chains A --out_folder ${2}_folder --seed $SEED --batch_size 1 
     CURR=$(find ${2}_folder/seqs | tail -1)
     cp $CURR $2
 }
@@ -57,7 +57,7 @@ function score() {
 	else
 		MODEL=$2
 	fi
-    podman run --rm -v $(pwd):$(pwd) openstructure:latest compare-structures --model $MODEL --reference $REFERENCE --output $3 --lddt --local-lddt --tm-score --rigid-scores --lddt-no-stereochecks
+    docker run --rm -v $(pwd):$(pwd) registry.scicore.unibas.ch/schwede/openstructure:latest compare-structures --model $MODEL --reference $REFERENCE --output $3 --lddt --local-lddt --tm-score --rigid-scores --lddt-no-stereochecks
 }
 
 function rf_diffusion() {
@@ -81,9 +81,18 @@ function filter_unk() {
 	python remove_blastp.py --query $1 --scores blast_filter_results.csv --output $2 --similarity $BLAST_SIMILARITY
 }
 
-PROT_MPNN_A=$PARENT_PATH/conf
-PROT_MPNN_A3M_A=$PARENT_PATH/a_conf.a3m
-SCORE_AA=$PARENT_PATH/score.json
+VANILLA_A=$PARENT_PATH/vanilla
+PROT_MPNN_A=$PARENT_PATH/prot_mpnn
+PROT_MPNN_A3M_A=$PROT_MPNN_A/prot_mpnn.a3m
+SCORE_VANILLA=$VANILLA_A/score.json
+SCORE_AA=$PROT_MPNN_A/score.json
+FASTA_FILE=$PARENT_PATH/$(basename $CONF_A .pdb).fasta
+mkdir -p $VANILLA_A
+mkdir -p $PROT_MPNN_A
+mkdir -p $PARENT_PATH
+pdb_tofasta $CONF_A >$FASTA_FILE
+fold_alpha $FASTA_FILE $VANILLA_A
+score $CONF_A $VANILLA_A $SCORE_VANILLA
 prot_MPNN $CONF_A $PROT_MPNN_A3M_A
 fold_alpha $PROT_MPNN_A3M_A $PROT_MPNN_A
 score $CONF_A $PROT_MPNN_A $SCORE_AA

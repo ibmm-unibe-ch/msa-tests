@@ -35,6 +35,10 @@ To analyse the created data, run `porter_scores_all_af3.ipynb` to get a good ove
 To analyse the MD simulations, run `md_proteins.py` and check `MD_proteins.ipynb`.
 
 To check the amount of sequences found in UniProt, run `find_duplicates.sh` and check the `filter_results` folder.
+
+To analyse the generated MSAs, run `compute_msa_entropy.py`. 
+### Test set proteins
+For a single protein with two conformations like for the proteins released after the training set cut-off date (SA1, ASCT2, STP10, ZNT8), run `test_one.sh`.
 ### Adversarial tests
 To run the adversarial tests, use `process_single.sh` and then analyse with `Single_proteins.ipynb`.
 ### MD simulations
@@ -42,6 +46,6 @@ To run the recovery pipeline with the fast-folding MD simulations, run `deshaw_o
 
 To run the recovery pipeline with high-temperature, unfolding MD simulation, run deshaw_unfolding.py, before analysing with `deshaw_unfolding_analysis.py`.
 ### FrankenMSA
-Check out the application of `FrankenFold.ipynb` to test our pipeline and combine inverse folded MSAs with traditional MMseqs2 MSAs.
+Check out the application of `FrankenMSA.ipynb` to test our pipeline and combine inverse folded MSAs with traditional MMseqs2 MSAs.
 ## Contact
 If you have questions, please contact jannik.gut@unibe.ch or thomas.lemmin@unibe.ch.
