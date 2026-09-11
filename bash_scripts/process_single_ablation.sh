@@ -9,8 +9,6 @@ SEED=6217
 PARENT_PATH=/data/jgut/msa-tests/single_protein_test/ablation
 HHFILTER_SIMILARITY=99
 BLAST_SIMILARITY=100
-MAXIT_PATH=/data/jgut/template-analysis/maxit-v10.200-prod-src/bin/maxit
-FASPR_PATH=/data/jgut/template-analysis/FASPR/FASPR
 PROTMPNN_PATH=~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py
 INPUT_CSV=data/single_proteins_alpha_beta.csv
 

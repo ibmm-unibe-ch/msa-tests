@@ -12,7 +12,6 @@ PARENT_PATH=/data/jgut/msa-tests/aaa_porter_all_models/porter_all_models
 SEQ_IDENTITY=0.3
 RCSBROOT=/data/jgut/template-analysis/maxit-v10.200-prod-src; export RCSBROOT
 MAXIT_PATH=/data/jgut/template-analysis/maxit-v10.200-prod-src/bin/maxit
-FASPR_PATH=/data/jgut/template-analysis/FASPR/FASPR
 PROTMPNN_PATH=~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py
 
 function get_pdbs() {
