@@ -27,14 +27,11 @@ To run our scripts, consider downloading these tools:
 ### Python environment
 To load our Python libraries run `micromamba env create -f environment.yaml`.
 ## Repository layout
-- `analysis/` — Python entry points that run or analyse the pipelines (run these as `python analysis/<script>.py`).
-- `bash_scripts/` — shell pipelines (run these as `bash bash_scripts/<script>.sh`).
-- `utils/` — shared Python modules imported by the scripts in `analysis/` (e.g. `utils.md_traj_utils`, `utils.pipeline`, `utils.deshaw_common`, `utils.scoring`), plus small standalone CLI helpers (`utils/get_secstrucs.py` and similar).
-- `data/` — input CSVs/JSON and generated output (`data/visualisations/`, `data/filter_results/`).
-- `result_notebooks/` — analysis notebooks; run with the notebook's own directory as the working directory (Jupyter's default).
-- `FrankenMSA.ipynb` stays at the repository root.
-
-All `analysis/*.py` and `bash_scripts/*.sh` invocations below assume the repository root as the working directory. The `bash_scripts/*.sh` scripts that previously hardcoded absolute tool/data paths (`porter_bash.sh`, `process_snapshot.sh`, `process_single.sh`, `process_single_ablation.sh`, `test_one.sh`, `find_duplicates.sh`) now accept `getopts` flags to override those paths (e.g. `-p` for a parent output path, `-m`/`-n` for the ProteinMPNN script, `-i` for an input CSV/directory); run a script with no flags to keep the previous defaults, or pass `-h`/an unknown flag to see its usage line.
+- `analysis/` — analysis scripts.
+- `bash_scripts/` — shell pipelines.
+- `utils/` — utility functions.
+- `data/` — input CSVs/JSON and generated output.
+- `result_notebooks/` — analysis notebooks.
 ## Run the code
 ### Fold-switching proteins
 To generate the data, adjust the paths and then run `bash_scripts/porter_bash.sh`.

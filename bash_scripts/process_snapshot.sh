@@ -14,6 +14,17 @@ RCSBROOT=/data/jgut/template-analysis/maxit-v10.200-prod-src; export RCSBROOT
 MAXIT_PATH=/data/jgut/template-analysis/maxit-v10.200-prod-src/bin/maxit
 PROTMPNN_PATH=~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py
 
+while getopts "m:" opt; do
+	case $opt in
+		m) PROTMPNN_PATH="$OPTARG" ;;
+		\?) echo "Usage: $0 [-m protmpnn_path] <input_struc> <output_dir>" >&2; exit 1 ;;
+	esac
+done
+shift $((OPTIND-1))
+
+INPUT_STRUC=$1
+OUTPUT_DIR=$2
+
 function get_pdbs() {
 	# $FULL_A $Alphafold_output $A3M_output 
 	# if [ ! -f $1 ]; then
@@ -154,17 +165,6 @@ function fold_rosetta() {
 function clean_pdb() {
 	pdb_delhetatm $1 | pdb_delinsertion | pdb_reres -1 | pdb_tidy | grep ^ATOM | grep -E "ALA|ARG|ASN|ASP|CYS|GLU|GLN|GLY|HIS|ILE|LEU|LYS|MET|PHE|PRO|SER|THR|TRP|TYR|VAL|SEC|PYL|HCY" > $2
 }
-
-while getopts "m:" opt; do
-	case $opt in
-		m) PROTMPNN_PATH="$OPTARG" ;;
-		\?) echo "Usage: $0 [-m protmpnn_path] <input_struc> <output_dir>" >&2; exit 1 ;;
-	esac
-done
-shift $((OPTIND-1))
-
-INPUT_STRUC=$1
-OUTPUT_DIR=$2
 
 mkdir -p $2
 PROT_MPNN_A3M=${OUTPUT_DIR}/prot_mpnn.a3m
