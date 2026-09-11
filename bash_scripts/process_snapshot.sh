@@ -28,7 +28,7 @@ function get_pdbs() {
 	cp $PARENT_PATH/temp_path/temp.pdb $1
 	$MAXIT_PATH -input temp_path/temp.pdb -output temp_path/1inp.cif -o 1
 	wget -O $1.fasta https://www.rcsb.org/fasta/entry/${PDB_ID}
-	python sel_chain.py --fastapath $1.fasta --chain $CHAIN --outputpath $3
+	python utils/sel_chain.py --fastapath $1.fasta --chain $CHAIN --outputpath $3
 	cp $3 $1.fasta
 	colabfold_batch --overwrite-existing-results --random-seed $SEED --num-seeds 1 --num-models 1 --num-recycle 0 --templates --custom-template-path $PARENT_PATH/temp_path --num-relax 0 $3 $PARENT_PATH/out
 	mv $PARENT_PATH/out/${PDB_ID}${CHAIN}_full_unrelaxed_rank_001_alphafold2_ptm_model_1_seed_6217.pdb $2
@@ -139,7 +139,7 @@ function filter_unk() {
 	# first,gb|AAP36446.1|,100.00,110
 	# second,sp|P01317.2|,100.00,60
 	# no-hit is missing
-	python remove_blastp.py --query $1 --scores blast_filter_results.csv --output $2 --similarity $BLAST_SIMILARITY
+	python utils/remove_blastp.py --query $1 --scores blast_filter_results.csv --output $2 --similarity $BLAST_SIMILARITY
 }
 
 function fold_rosetta() {

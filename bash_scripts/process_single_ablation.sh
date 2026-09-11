@@ -104,7 +104,7 @@ function get_secstruc(){ #$1 --> .pdb #$2 output_sec_struc.json
 
 while IFS=, read -r ID_A LEN_A ID_B LEN_B
 do
-	CURR_PATH=$PARENT_PATH/$GROUP/${ID_A}${ID_B}
+	CURR_PATH=$PARENT_PATH/${ID_A}${ID_B}
 	echo The current path is: $CURR_PATH
 	mkdir -p $CURR_PATH
     STRUC_A=$CURR_PATH/${ID_A}.pdb

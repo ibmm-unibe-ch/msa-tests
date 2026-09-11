@@ -4,7 +4,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 import mdtraj as md
-from utils.md_traj_utils import compute_PCA, unpickle_obj, pickle_obj, make_hdbscan, make_deshaw_plot, clean_traj_c_alpha, compute_all_rmsds, best_hummer_q
+from utils.md_traj_utils import compute_PCA, unpickle_obj, pickle_obj, make_deshaw_plot, clean_traj_c_alpha, compute_all_rmsds, best_hummer_q
+from utils.pipeline import make_hdbscan
 from utils.deshaw_common import (
     MAIN_PRED_COLOUR, MINOR_PRED_COLOUR, MEAN_PRED_COLOUR,
     MAIN_SIM_COLOUR, MINOR_SIM_COLOUR, MEAN_SIM_COLOUR, OTHER_COLOUR,
