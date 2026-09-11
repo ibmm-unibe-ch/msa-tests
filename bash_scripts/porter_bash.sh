@@ -13,9 +13,22 @@ PARENT_PATH=/data/jgut/msa-tests/aaa_porter_all_models/porter_all_models
 SEQ_IDENTITY=0.3
 RCSBROOT=/data/jgut/template-analysis/maxit-v10.200-prod-src; export RCSBROOT
 MAXIT_PATH=/data/jgut/template-analysis/maxit-v10.200-prod-src/bin/maxit
-FASPR_PATH=/data/jgut/template-analysis/FASPR/FASPR
 ROSETTAFOLD_PATH=/home/jgut/tools/RoseTTAFold2/network/predict.py
 ROSETTAFOLD_WEIGHTS=/home/jgut/tools/RoseTTAFold2/network/RF2_jan24.pt
+PROTMPNN_PATH=~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py
+INPUT_CSV=leftover_singles.csv
+
+while getopts "p:x:r:w:n:i:" opt; do
+	case $opt in
+		p) PARENT_PATH="$OPTARG" ;;
+		x) MAXIT_PATH="$OPTARG" ;;
+		r) ROSETTAFOLD_PATH="$OPTARG" ;;
+		w) ROSETTAFOLD_WEIGHTS="$OPTARG" ;;
+		n) PROTMPNN_PATH="$OPTARG" ;;
+		i) INPUT_CSV="$OPTARG" ;;
+		\?) echo "Usage: $0 [-p parent_path] [-x maxit_path] [-r rosettafold_path] [-w rosettafold_weights] [-n protmpnn_path] [-i input_csv]" >&2; exit 1 ;;
+	esac
+done
 
 function get_pdbs() {
 	# $FULL_A $Alphafold_output $A3M_output 
@@ -89,7 +102,7 @@ function fold_alpha3() {
 
 function prot_MPNN() {
 	rm -r ${2}_folder
-	micromamba run -n RF2 python ~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py --num_seq_per_target 128 --sampling_temp $SAMPLING_TEMP --pdb_path $1 --pdb_path_chains A --out_folder ${2}_folder --seed $SEED --batch_size 1 
+	micromamba run -n RF2 python $PROTMPNN_PATH --num_seq_per_target 128 --sampling_temp $SAMPLING_TEMP --pdb_path $1 --pdb_path_chains A --out_folder ${2}_folder --seed $SEED --batch_size 1
 	CURR=$(find ${2}_folder/seqs | tail -1)
 	cp $CURR $2
 }
@@ -161,7 +174,7 @@ function af_cluster() {
 	python utils/AF-cluster.py $1 -i $2 -o $3
 }
 
-readarray -t array < leftover_singles.csv
+readarray -t array < $INPUT_CSV
 for a in "${array[@]}"; do
 	echo $a |
 	 while IFS=, read -r ID_A ID_B DATE_A DATE_B LENGTH_A LENGTH_B TYPE OFFSET_A OFFSET_B

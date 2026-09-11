@@ -11,7 +11,7 @@ from pathlib import Path
 from heapq import nsmallest
 from operator import itemgetter
 from difflib import SequenceMatcher
-from md_traj_utils import clean_traj
+from .md_traj_utils import clean_traj
 
 PAIRS = ['7ahlE4yhdG',
  '1repC2z9oA',

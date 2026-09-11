@@ -12,7 +12,18 @@ PARENT_PATH=/data/jgut/msa-tests/aaa_porter_all_models/porter_all_models
 SEQ_IDENTITY=0.3
 RCSBROOT=/data/jgut/template-analysis/maxit-v10.200-prod-src; export RCSBROOT
 MAXIT_PATH=/data/jgut/template-analysis/maxit-v10.200-prod-src/bin/maxit
-FASPR_PATH=/data/jgut/template-analysis/FASPR/FASPR
+PROTMPNN_PATH=~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py
+
+while getopts "m:" opt; do
+	case $opt in
+		m) PROTMPNN_PATH="$OPTARG" ;;
+		\?) echo "Usage: $0 [-m protmpnn_path] <input_struc> <output_dir>" >&2; exit 1 ;;
+	esac
+done
+shift $((OPTIND-1))
+
+INPUT_STRUC=$1
+OUTPUT_DIR=$2
 
 function get_pdbs() {
 	# $FULL_A $Alphafold_output $A3M_output 
@@ -27,7 +38,7 @@ function get_pdbs() {
 	cp $PARENT_PATH/temp_path/temp.pdb $1
 	$MAXIT_PATH -input temp_path/temp.pdb -output temp_path/1inp.cif -o 1
 	wget -O $1.fasta https://www.rcsb.org/fasta/entry/${PDB_ID}
-	python sel_chain.py --fastapath $1.fasta --chain $CHAIN --outputpath $3
+	python utils/sel_chain.py --fastapath $1.fasta --chain $CHAIN --outputpath $3
 	cp $3 $1.fasta
 	colabfold_batch --overwrite-existing-results --random-seed $SEED --num-seeds 1 --num-models 1 --num-recycle 0 --templates --custom-template-path $PARENT_PATH/temp_path --num-relax 0 $3 $PARENT_PATH/out
 	mv $PARENT_PATH/out/${PDB_ID}${CHAIN}_full_unrelaxed_rank_001_alphafold2_ptm_model_1_seed_6217.pdb $2
@@ -82,7 +93,7 @@ function fold_alpha3() {
 
 function prot_MPNN() {
 	rm -r ${2}_folder
-	micromamba run -n RF2 python ~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py --num_seq_per_target 128 --sampling_temp $SAMPLING_TEMP --pdb_path $1 --pdb_path_chains A --out_folder ${2}_folder --seed $SEED --batch_size 1 
+	micromamba run -n RF2 python $PROTMPNN_PATH --num_seq_per_target 128 --sampling_temp $SAMPLING_TEMP --pdb_path $1 --pdb_path_chains A --out_folder ${2}_folder --seed $SEED --batch_size 1
 	CURR=$(find ${2}_folder/seqs | tail -1)
 	echo "CURR"
 	echo $CURR
@@ -138,7 +149,7 @@ function filter_unk() {
 	# first,gb|AAP36446.1|,100.00,110
 	# second,sp|P01317.2|,100.00,60
 	# no-hit is missing
-	python remove_blastp.py --query $1 --scores blast_filter_results.csv --output $2 --similarity $BLAST_SIMILARITY
+	python utils/remove_blastp.py --query $1 --scores blast_filter_results.csv --output $2 --similarity $BLAST_SIMILARITY
 }
 
 function fold_rosetta() {
@@ -154,9 +165,6 @@ function fold_rosetta() {
 function clean_pdb() {
 	pdb_delhetatm $1 | pdb_delinsertion | pdb_reres -1 | pdb_tidy | grep ^ATOM | grep -E "ALA|ARG|ASN|ASP|CYS|GLU|GLN|GLY|HIS|ILE|LEU|LYS|MET|PHE|PRO|SER|THR|TRP|TYR|VAL|SEC|PYL|HCY" > $2
 }
-
-INPUT_STRUC=$1
-OUTPUT_DIR=$2
 
 mkdir -p $2
 PROT_MPNN_A3M=${OUTPUT_DIR}/prot_mpnn.a3m

@@ -10,9 +10,19 @@ RF_DESIGNS=10
 SAMPLING_TEMP=1.0
 SEED=6217
 CONF_A=/data/jgut/msa-tests/rebuttal/znt8/6xpf_start.pdb
-PARENT_PATH="$(dirname "$CONF_A")/$(basename "${CONF_A%.*}")"
+PROTMPNN_PATH=~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py
 HHFILTER_SIMILARITY=99
 BLAST_SIMILARITY=100
+
+while getopts "c:m:" opt; do
+	case $opt in
+		c) CONF_A="$OPTARG" ;;
+		m) PROTMPNN_PATH="$OPTARG" ;;
+		\?) echo "Usage: $0 [-c conf_a_path] [-m protmpnn_path]" >&2; exit 1 ;;
+	esac
+done
+
+PARENT_PATH="$(dirname "$CONF_A")/$(basename "${CONF_A%.*}")"
 
 function get_pdbs() {
 	# $FULL_A $CONF_A $LENGTH $OFFSET_A $FULL_FASTA_A
@@ -24,7 +34,7 @@ function get_pdbs() {
 		pdb_fetch ${PDB_ID} | pdb_selmodel -1 | pdb_selchain -$CHAIN | pdb_rplchain -$CHAIN:A | pdb_delhetatm | pdb_reres -1 | pdb_tidy | grep ^ATOM >$1
 		pdb_tofasta $1>$5
 		wget -q -O $PAR_PATH/$PDB_ID.fasta https://www.rcsb.org/fasta/entry/${PDB_ID}
-		PDB_OFFSET=$(python find_pdb_offset.py --realfasta $PAR_PATH/$PDB_ID.fasta --foundfasta $5 --realchain $CHAIN --realstart $4 --length $3)
+		PDB_OFFSET=$(python utils/find_pdb_offset.py --realfasta $PAR_PATH/$PDB_ID.fasta --foundfasta $5 --realchain $CHAIN --realstart $4 --length $3)
 	fi
 	echo "PDB_OFFSET"
 	echo $PDB_OFFSET
@@ -41,7 +51,7 @@ function fold_alpha() {
 
 function prot_MPNN() {
 	rm -r ${2}_folder
-	micromamba run -n SE3nv python ~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py --num_seq_per_target 128 --sampling_temp $SAMPLING_TEMP --pdb_path $1 --pdb_path_chains A --out_folder ${2}_folder --seed $SEED --batch_size 1 
+	micromamba run -n SE3nv python $PROTMPNN_PATH --num_seq_per_target 128 --sampling_temp $SAMPLING_TEMP --pdb_path $1 --pdb_path_chains A --out_folder ${2}_folder --seed $SEED --batch_size 1
     CURR=$(find ${2}_folder/seqs | tail -1)
     cp $CURR $2
 }
@@ -64,7 +74,7 @@ function rf_diffusion() {
 	pa_dir="$(dirname "$3")"
 	rm -r $pa_dir
 	micromamba run -n SE3nv /data/jgut/template-analysis/RFdiffusion/scripts/run_inference.py "contigmap.contigs=[${5}-${5}]" "contigmap.provide_seq=[${5}-${5}]" inference.output_prefix=$3 inference.input_pdb=$1 inference.num_designs=$RF_DESIGNS diffuser.partial_T=$PARTIAL_T
-	python select_lowest.py --parentpath $3 --confa $1 --confb $2 --output ${3}_best.pdb
+	python utils/select_lowest.py --parentpath $3 --confa $1 --confb $2 --output ${3}_best.pdb
 	cp ${3}_best.pdb $4
 }
 
@@ -78,7 +88,7 @@ function filter_unk() {
 	# first,gb|AAP36446.1|,100.00,110
 	# second,sp|P01317.2|,100.00,60
 	# no-hit is missing
-	python remove_blastp.py --query $1 --scores blast_filter_results.csv --output $2 --similarity $BLAST_SIMILARITY
+	python utils/remove_blastp.py --query $1 --scores blast_filter_results.csv --output $2 --similarity $BLAST_SIMILARITY
 }
 
 VANILLA_A=$PARENT_PATH/vanilla

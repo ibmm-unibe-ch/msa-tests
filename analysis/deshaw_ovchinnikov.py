@@ -1,9 +1,12 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import mdtraj as md
+from utils.md_utils import get_pdb_from_traj
+from utils.md_traj_utils import run_single_seq,load_files,compute_rmsds,pickle_obj, clean_traj
 from pathlib import Path
-from md_utils import get_pdb_from_traj
-from md_traj_utils import run_single_seq,load_files,compute_rmsds,pickle_obj, clean_traj
-from pathlib import Path
-from utils import run_single_pipeline, run_normal_run, ost_score
+from utils.pipeline import run_single_pipeline, run_normal_run, ost_score
 import subprocess
 
 INTERESTING_DESHAW_PROTEINS = {"Protein_G": {"folded_PDB": "1MI0", "Abbreviation":"NuG2","Start":5,"Mutations":[41]},"NTL9": {"folded_PDB": "2hba", "Abbreviation":"NTL9", "Length": 37,"Mutations":[11]},"Villin": {"folded_PDB": "2F4K", "Abbreviation":"2F4K","Mutations":[23,26,28],"Experiment_mutations":[25]}, }

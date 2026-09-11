@@ -1,6 +1,9 @@
-from md_utils import load_files, compute_PCA, make_sns_plot, find_neighbours, get_pdb_from_traj, ost_score, PAIRS, get_closest_rmsd
-from utils import pickle_obj, unpickle_obj
+import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from utils.md_utils import load_files, compute_PCA, make_sns_plot, find_neighbours, get_pdb_from_traj, ost_score, PAIRS, get_closest_rmsd
+from utils.pipeline import pickle_obj, unpickle_obj
 
 hits = {
 "1mbyA":"/data/jgut/msa-tests/protein_only_dcd_20052025/1mbyA/it_1_rmsd_0.183_index_25046.pdb",
@@ -55,7 +58,7 @@ if __name__ == "__main__":
         else:
             transformed, pca = unpickle_obj(pca_file) 
         sampled = transformed[::10]
-        make_sns_plot(transformed, protein_name, len(protein_adjusted_predictions), Path("visualisations")/f"{protein_name}_pca.svg", variance=pca.explained_variance_ratio_)
+        make_sns_plot(transformed, protein_name, len(protein_adjusted_predictions), Path("data/visualisations")/f"{protein_name}_pca.svg", variance=pca.explained_variance_ratio_)
         if len(protein_adjusted_predictions)==0:
             continue
         get_pdb_from_traj(joint_traj, 0, protein_path/"start.pdb")

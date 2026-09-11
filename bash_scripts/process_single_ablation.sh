@@ -6,11 +6,20 @@ RECYCLES=3
 BESTNAME="*_unrelaxed_rank_001*seed_[0-9][0-9][0-9][0-9].pdb"
 SAMPLING_TEMP=1
 SEED=6217
-PARENT_PATH=/data/jgut/msa-tests/single_protein_test
+PARENT_PATH=/data/jgut/msa-tests/single_protein_test/ablation
 HHFILTER_SIMILARITY=99
 BLAST_SIMILARITY=100
-MAXIT_PATH=/data/jgut/template-analysis/maxit-v10.200-prod-src/bin/maxit
-FASPR_PATH=/data/jgut/template-analysis/FASPR/FASPR
+PROTMPNN_PATH=~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py
+INPUT_CSV=data/single_proteins_alpha_beta.csv
+
+while getopts "p:m:i:" opt; do
+	case $opt in
+		p) PARENT_PATH="$OPTARG" ;;
+		m) PROTMPNN_PATH="$OPTARG" ;;
+		i) INPUT_CSV="$OPTARG" ;;
+		\?) echo "Usage: $0 [-p parent_path] [-m protmpnn_path] [-i input_csv]" >&2; exit 1 ;;
+	esac
+done
 
 function get_pdbs() {
 	# $FULL_A $Alphafold_output $A3M_output
@@ -45,7 +54,7 @@ function fold_alpha() {
 
 function prot_MPNN() {
 	rm -r ${2}_folder
-	micromamba run -n RF2 python ~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py --num_seq_per_target 128 --sampling_temp $SAMPLING_TEMP --pdb_path $1 --pdb_path_chains A --out_folder ${2}_folder --seed $SEED --batch_size 1 
+	micromamba run -n RF2 python $PROTMPNN_PATH --num_seq_per_target 128 --sampling_temp $SAMPLING_TEMP --pdb_path $1 --pdb_path_chains A --out_folder ${2}_folder --seed $SEED --batch_size 1
 	CURR=$(find ${2}_folder/seqs | tail -1)
 	cp $CURR $2
 }
@@ -62,7 +71,7 @@ function score() {
 	else
 		MODEL=$2
 	fi
-	docker run --rm -v $(pwd):$(pwd) -v /scratch/alphafold_database/DEShaw_simulations:/scratch/alphafold_database/DEShaw_simulations registry.scicore.unibas.ch/schwede/openstructure:latest compare-structures --model $MODEL --reference $REFERENCE --output $3 --residue-number-alignment --lddt --local-lddt --bb-lddt --bb-local-lddt --tm-score --rigid-scores --lddt-no-stereochecks
+	docker run --rm -v $(pwd):$(pwd) registry.scicore.unibas.ch/schwede/openstructure:latest compare-structures --model $MODEL --reference $REFERENCE --output $3 --residue-number-alignment --lddt --local-lddt --bb-lddt --bb-local-lddt --tm-score --rigid-scores --lddt-no-stereochecks
 }
 
 function score_both(){
@@ -83,17 +92,17 @@ function first_and_rest(){
 	else
 		A3M_file=$2
 	fi
-	tail -n +4 $A3M_file >> $3
+	tail -n +3 $A3M_file >> $3
 }
 
 function get_secstruc(){ #$1 --> .pdb #$2 output_sec_struc.json
-		pdb_tofasta $1 >$1.fasta
-		python utils/get_secstrucs.py --input_pdb $1 --output_json $2
+	pdb_tofasta $1 >$1.fasta
+	python utils/get_secstrucs.py --input_pdb $1 --output_json $2
 }
 
-while IFS=, read -r GROUP ID_A ID_B START END
+while IFS=, read -r ID_A LEN_A ID_B LEN_B
 do
-	CURR_PATH=$PARENT_PATH/$GROUP/${ID_A}${ID_B}
+	CURR_PATH=$PARENT_PATH/${ID_A}${ID_B}
 	echo The current path is: $CURR_PATH
 	mkdir -p $CURR_PATH
     STRUC_A=$CURR_PATH/${ID_A}.pdb
@@ -120,46 +129,33 @@ do
     MIXED_A3M_B_A_MPNN=$CURR_PATH/${ID_B}_main_${ID_A}_protmpnn.a3m
     get_pdbs $STRUC_A $FASTA_PATH_A || (echo "Problem with $FULL_A"; continue)
 	get_pdbs $STRUC_B $FASTA_PATH_B || (echo "Problem with $FULL_B"; continue)
+	
+	START=$((($LEN_A-$LEN_B)/2))
+	END=$(($START+$LEN_B))
+	
 	cut_pdb $STRUC_A process_single_tmp $START $END
 	mv process_single_tmp $STRUC_A
-	get_secstruc $STRUC_A ${STRUC_A%????}_sec_struc.json
-	get_secstruc $STRUC_B ${STRUC_B%????}_sec_struc.json
 	pdb_tofasta $STRUC_A > $FASTA_PATH_A
 	lower=$(tail -n +2 $FASTA_PATH_A | tr -d '\n')
 	higher=$(head -1 $FASTA_PATH_A)
 	echo -e $higher"\n"$lower > $FASTA_PATH_A
-    prot_MPNN $STRUC_A $PROT_MPNN_A3M_A
+
+	cut_pdb $STRUC_B process_single_tmp $START $END
+	mv process_single_tmp $STRUC_B
+	pdb_tofasta $STRUC_B > $FASTA_PATH_B
+	lower=$(tail -n +2 $FASTA_PATH_B | tr -d '\n')
+	higher=$(head -1 $FASTA_PATH_B)
+	echo -e $higher"\n"$lower > $FASTA_PATH_B
+    
+	prot_MPNN $STRUC_A $PROT_MPNN_A3M_A
 	prot_MPNN $STRUC_B $PROT_MPNN_A3M_B
-	echo "Classical $ID_A"
-	cp $FASTA_PATH_A $single_seq_A
-    fold_alpha $single_seq_A $single_out_A
-	score_both $single_out_A $STRUC_A $STRUC_B
-    fold_alpha $FASTA_PATH_A $ALPHAFOLD_A
-    score_both $ALPHAFOLD_A $STRUC_A $STRUC_B
-    fold_alpha $PROT_MPNN_A3M_A $PROT_MPNN_A
-	score_both $PROT_MPNN_A $STRUC_A $STRUC_B
-    echo "Classical $ID_B"
-	cp $FASTA_PATH_B $single_seq_B
-    fold_alpha $single_seq_B $single_out_B  
-	score_both $single_out_B $STRUC_A $STRUC_B
-    fold_alpha $FASTA_PATH_B $ALPHAFOLD_B
-    score_both $ALPHAFOLD_B $STRUC_A $STRUC_B
-    fold_alpha $PROT_MPNN_A3M_B $PROT_MPNN_B
-	score_both $PROT_MPNN_B $STRUC_A $STRUC_B
-	echo "Mixed $ID_A"
-    first_and_rest $single_seq_A $ALPHAFOLD_B $MIXED_A3M_A_B
-    first_and_rest $single_seq_A $PROT_MPNN_A3M_B $MIXED_A3M_A_B_MPNN
-    fold_alpha $MIXED_A3M_A_B $MIXED_A_B 
+
+    first_and_rest $FASTA_PATH_A $PROT_MPNN_A3M_B $MIXED_A3M_A_B_MPNN
     fold_alpha $MIXED_A3M_A_B_MPNN $MIXED_A_B_MPNN
-	get_secstruc $MIXED_A_B_MPNN/best.pdb ${MIXED_A_B_MPNN}best_sec_struc.json
-    score_both $MIXED_A_B $STRUC_A $STRUC_B
     score_both $MIXED_A_B_MPNN $STRUC_A $STRUC_B
-    echo "Mixed $ID_B"
-    first_and_rest $single_seq_B $ALPHAFOLD_A $MIXED_A3M_B_A
-    first_and_rest $single_seq_B $PROT_MPNN_A3M_A $MIXED_A3M_B_A_MPNN
-    fold_alpha $MIXED_A3M_B_A $MIXED_B_A 
+    
+	first_and_rest $FASTA_PATH_B $PROT_MPNN_A3M_A $MIXED_A3M_B_A_MPNN
     fold_alpha $MIXED_A3M_B_A_MPNN $MIXED_B_A_MPNN
-    score_both $MIXED_B_A $STRUC_A $STRUC_B
     score_both $MIXED_B_A_MPNN $STRUC_A $STRUC_B
 	echo "Done with $CURR_PATH"
-done < single_proteins.csv
+done < $INPUT_CSV
