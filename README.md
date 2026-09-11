@@ -34,7 +34,7 @@ To load our Python libraries run `micromamba env create -f environment.yaml`.
 - `result_notebooks/` — analysis notebooks; run with the notebook's own directory as the working directory (Jupyter's default).
 - `FrankenMSA.ipynb` stays at the repository root.
 
-All `analysis/*.py` and `bash_scripts/*.sh` invocations below assume the repository root as the working directory.
+All `analysis/*.py` and `bash_scripts/*.sh` invocations below assume the repository root as the working directory. The `bash_scripts/*.sh` scripts that previously hardcoded absolute tool/data paths (`porter_bash.sh`, `process_snapshot.sh`, `process_single.sh`, `process_single_ablation.sh`, `test_one.sh`, `find_duplicates.sh`) now accept `getopts` flags to override those paths (e.g. `-p` for a parent output path, `-m`/`-n` for the ProteinMPNN script, `-i` for an input CSV/directory); run a script with no flags to keep the previous defaults, or pass `-h`/an unknown flag to see its usage line.
 ## Run the code
 ### Fold-switching proteins
 To generate the data, adjust the paths and then run `bash_scripts/porter_bash.sh`.

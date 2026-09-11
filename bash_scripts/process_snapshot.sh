@@ -13,6 +13,7 @@ SEQ_IDENTITY=0.3
 RCSBROOT=/data/jgut/template-analysis/maxit-v10.200-prod-src; export RCSBROOT
 MAXIT_PATH=/data/jgut/template-analysis/maxit-v10.200-prod-src/bin/maxit
 FASPR_PATH=/data/jgut/template-analysis/FASPR/FASPR
+PROTMPNN_PATH=~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py
 
 function get_pdbs() {
 	# $FULL_A $Alphafold_output $A3M_output 
@@ -82,7 +83,7 @@ function fold_alpha3() {
 
 function prot_MPNN() {
 	rm -r ${2}_folder
-	micromamba run -n RF2 python ~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py --num_seq_per_target 128 --sampling_temp $SAMPLING_TEMP --pdb_path $1 --pdb_path_chains A --out_folder ${2}_folder --seed $SEED --batch_size 1 
+	micromamba run -n RF2 python $PROTMPNN_PATH --num_seq_per_target 128 --sampling_temp $SAMPLING_TEMP --pdb_path $1 --pdb_path_chains A --out_folder ${2}_folder --seed $SEED --batch_size 1
 	CURR=$(find ${2}_folder/seqs | tail -1)
 	echo "CURR"
 	echo $CURR
@@ -154,6 +155,14 @@ function fold_rosetta() {
 function clean_pdb() {
 	pdb_delhetatm $1 | pdb_delinsertion | pdb_reres -1 | pdb_tidy | grep ^ATOM | grep -E "ALA|ARG|ASN|ASP|CYS|GLU|GLN|GLY|HIS|ILE|LEU|LYS|MET|PHE|PRO|SER|THR|TRP|TYR|VAL|SEC|PYL|HCY" > $2
 }
+
+while getopts "m:" opt; do
+	case $opt in
+		m) PROTMPNN_PATH="$OPTARG" ;;
+		\?) echo "Usage: $0 [-m protmpnn_path] <input_struc> <output_dir>" >&2; exit 1 ;;
+	esac
+done
+shift $((OPTIND-1))
 
 INPUT_STRUC=$1
 OUTPUT_DIR=$2

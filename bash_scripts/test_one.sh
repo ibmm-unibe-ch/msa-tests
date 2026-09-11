@@ -10,9 +10,19 @@ RF_DESIGNS=10
 SAMPLING_TEMP=1.0
 SEED=6217
 CONF_A=/data/jgut/msa-tests/rebuttal/znt8/6xpf_start.pdb
-PARENT_PATH="$(dirname "$CONF_A")/$(basename "${CONF_A%.*}")"
+PROTMPNN_PATH=~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py
 HHFILTER_SIMILARITY=99
 BLAST_SIMILARITY=100
+
+while getopts "c:m:" opt; do
+	case $opt in
+		c) CONF_A="$OPTARG" ;;
+		m) PROTMPNN_PATH="$OPTARG" ;;
+		\?) echo "Usage: $0 [-c conf_a_path] [-m protmpnn_path]" >&2; exit 1 ;;
+	esac
+done
+
+PARENT_PATH="$(dirname "$CONF_A")/$(basename "${CONF_A%.*}")"
 
 function get_pdbs() {
 	# $FULL_A $CONF_A $LENGTH $OFFSET_A $FULL_FASTA_A
@@ -41,7 +51,7 @@ function fold_alpha() {
 
 function prot_MPNN() {
 	rm -r ${2}_folder
-	micromamba run -n SE3nv python ~/GitHub/msa-diffusion/ProteinMPNN/protein_mpnn_run.py --num_seq_per_target 128 --sampling_temp $SAMPLING_TEMP --pdb_path $1 --pdb_path_chains A --out_folder ${2}_folder --seed $SEED --batch_size 1 
+	micromamba run -n SE3nv python $PROTMPNN_PATH --num_seq_per_target 128 --sampling_temp $SAMPLING_TEMP --pdb_path $1 --pdb_path_chains A --out_folder ${2}_folder --seed $SEED --batch_size 1
     CURR=$(find ${2}_folder/seqs | tail -1)
     cp $CURR $2
 }
