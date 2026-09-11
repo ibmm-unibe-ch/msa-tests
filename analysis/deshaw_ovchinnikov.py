@@ -1,5 +1,8 @@
-import mdtraj as md
+import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import mdtraj as md
 from utils.md_utils import get_pdb_from_traj
 from utils.md_traj_utils import run_single_seq,load_files,compute_rmsds,pickle_obj, clean_traj
 from pathlib import Path

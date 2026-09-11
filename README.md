@@ -7,11 +7,11 @@
 > These results establish synthetic MSAs as a generalizable framework for dissecting learned conformational landscapes in deep learning structure predictors, with direct implications for understanding model behavior and accessing biologically relevant hidden states.
 ## Installation
 ### Datasets
-The **fold-switching dataset** is taken from [Extant fold-switching proteins are widespread](https://www.pnas.org/doi/abs/10.1073/pnas.1800168115) and saved as *porter_data.csv* for the working samples and *porter_excluded.csv* for the excluded examples.
+The **fold-switching dataset** is taken from [Extant fold-switching proteins are widespread](https://www.pnas.org/doi/abs/10.1073/pnas.1800168115) and saved as *data/porter_data.csv* for the working samples and *data/excluded_porter.csv* for the excluded examples.
 
 The **fast-folding simulations** are taken from the paper [How Fast-Folding Proteins fold](https://www.science.org/doi/10.1126/science.1208351).
 
-The **adversary examples** are selected haphazardly by hand and saved to *single_proteins.csv*.
+The **adversary examples** are selected haphazardly by hand and saved to *data/single_proteins.csv*.
 
 ### External programs
 To run our scripts, consider downloading these tools:
@@ -26,25 +26,34 @@ To run our scripts, consider downloading these tools:
 - [RosettAFold2](https://github.com/uw-ipd/RoseTTAFold2)
 ### Python environment
 To load our Python libraries run `micromamba env create -f environment.yaml`.
+## Repository layout
+- `analysis/` — Python entry points that run or analyse the pipelines (run these as `python analysis/<script>.py`).
+- `bash_scripts/` — shell pipelines (run these as `bash bash_scripts/<script>.sh`).
+- `utils/` — shared Python modules imported by the scripts in `analysis/` (e.g. `utils.md_traj_utils`, `utils.pipeline`, `utils.deshaw_common`, `utils.scoring`), plus small standalone CLI helpers (`utils/get_secstrucs.py` and similar).
+- `data/` — input CSVs/JSON and generated output (`data/visualisations/`, `data/filter_results/`).
+- `result_notebooks/` — analysis notebooks; run with the notebook's own directory as the working directory (Jupyter's default).
+- `FrankenMSA.ipynb` stays at the repository root.
+
+All `analysis/*.py` and `bash_scripts/*.sh` invocations below assume the repository root as the working directory.
 ## Run the code
 ### Fold-switching proteins
-To generate the data, adjust the paths and then run `porter_bash.sh`.
+To generate the data, adjust the paths and then run `bash_scripts/porter_bash.sh`.
 
-To analyse the created data, run `porter_scores_all_af3.ipynb` to get a good overview and then run `other_nmr_models.ipynb` to check on NMR structures.
+To analyse the created data, run `result_notebooks/porter_scores_all_af3.ipynb` to get a good overview and then run `result_notebooks/other_nmr_models.ipynb` to check on NMR structures.
 
-To analyse the MD simulations, run `md_proteins.py` and check `MD_proteins.ipynb`.
+To analyse the MD simulations, run `analysis/md_proteins.py` and check `result_notebooks/MD_proteins.ipynb`.
 
-To check the amount of sequences found in UniProt, run `find_duplicates.sh` and check the `filter_results` folder.
+To check the amount of sequences found in UniProt, run `bash_scripts/find_duplicates.sh` and check the `data/filter_results` folder.
 
-To analyse the generated MSAs, run `compute_msa_entropy.py`. 
+To analyse the generated MSAs, run `analysis/compute_msa_entropy.py`. 
 ### Test set proteins
-For a single protein with two conformations like for the proteins released after the training set cut-off date (SA1, ASCT2, STP10, ZNT8), run `test_one.sh`.
+For a single protein with two conformations like for the proteins released after the training set cut-off date (SA1, ASCT2, STP10, ZNT8), run `bash_scripts/test_one.sh`.
 ### Adversarial tests
-To run the adversarial tests, use `process_single.sh` and then analyse with `Single_proteins.ipynb`.
+To run the adversarial tests, use `bash_scripts/process_single.sh` and then analyse with `result_notebooks/Single_proteins.ipynb`.
 ### MD simulations
-To run the recovery pipeline with the fast-folding MD simulations, run `deshaw_ovchinnikov.py`, before analysing with `deshaw_ovchinnikov_analysis.py` and the Q-scores with `Q-score_MMSeqs.ipynb`
+To run the recovery pipeline with the fast-folding MD simulations, run `analysis/deshaw_ovchinnikov.py`, before analysing with `analysis/deshaw_ovchinnikov_analysis.py` and the Q-scores with `result_notebooks/Q-score_MMSeqs.ipynb`
 
-To run the recovery pipeline with high-temperature, unfolding MD simulation, run deshaw_unfolding.py, before analysing with `deshaw_unfolding_analysis.py`.
+To run the recovery pipeline with high-temperature, unfolding MD simulation, run `analysis/deshaw_unfolding.py`, before analysing with `analysis/deshaw_unfolding_analysis.py`.
 ### FrankenMSA
 Check out the application of `FrankenMSA.ipynb` to test our pipeline and combine inverse folded MSAs with traditional MMseqs2 MSAs.
 ## Contact

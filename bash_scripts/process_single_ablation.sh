@@ -149,4 +149,4 @@ do
     fold_alpha $MIXED_A3M_B_A_MPNN $MIXED_B_A_MPNN
     score_both $MIXED_B_A_MPNN $STRUC_A $STRUC_B
 	echo "Done with $CURR_PATH"
-done < single_proteins_alpha_beta.csv
+done < data/single_proteins_alpha_beta.csv

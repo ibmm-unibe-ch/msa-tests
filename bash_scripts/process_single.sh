@@ -162,4 +162,4 @@ do
     score_both $MIXED_B_A $STRUC_A $STRUC_B
     score_both $MIXED_B_A_MPNN $STRUC_A $STRUC_B
 	echo "Done with $CURR_PATH"
-done < single_proteins.csv
+done < data/single_proteins.csv

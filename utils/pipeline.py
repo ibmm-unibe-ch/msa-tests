@@ -13,11 +13,11 @@ def unpickle_obj(pickle_path):
     return obj
 
 def run_single_pipeline(input_file, output_path):
-    input_string = f"bash process_snapshot.sh {input_file} {output_path}"
+    input_string = f"bash bash_scripts/process_snapshot.sh {input_file} {output_path}"
     subprocess.run(input_string, shell=True, check=True)
 
 def run_inverse_folding_check(input_file, output_path):
-    input_string = f"bash process_inverse_folding_check.sh {input_file} {output_path}"
+    input_string = f"bash bash_scripts/process_inverse_folding_check.sh {input_file} {output_path}"
     subprocess.run(input_string, shell=True, check=True)
 
 def run_single_seq(input_file, output_path):
