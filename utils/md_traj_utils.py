@@ -1,7 +1,7 @@
 import mdtraj as md
 from sklearn.neighbors import NearestNeighbors
 from pathlib import Path
-from utils import pickle_obj, unpickle_obj, run_single_seq, compute_PCA
+from .pipeline import pickle_obj, unpickle_obj, run_single_seq, compute_PCA
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns

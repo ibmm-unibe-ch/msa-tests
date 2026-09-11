@@ -1,50 +1,22 @@
 import numpy as np
 import mdtraj as md
 from pathlib import Path
-from md_traj_utils import compute_PCA, unpickle_obj, pickle_obj, make_deshaw_plot, clean_traj_c_alpha, compute_all_rmsds, best_hummer_q, get_pdb_from_traj
-from scipy import stats
+from utils.md_traj_utils import compute_PCA, unpickle_obj, pickle_obj, make_deshaw_plot, clean_traj_c_alpha, compute_all_rmsds, best_hummer_q, get_pdb_from_traj
+from utils.deshaw_common import (
+    MAIN_PRED_COLOUR, MINOR_PRED_COLOUR, MEAN_PRED_COLOUR,
+    MAIN_SIM_COLOUR, MINOR_SIM_COLOUR, MEAN_SIM_COLOUR, OTHER_COLOUR,
+    TO_MICRO, FRAMES_TO_AVERAGE, FRAMES_TO_EXCLUDE,
+    get_frame_number, get_dcd_number, find_bigger_cluster, download_pdb,
+)
 import matplotlib.pyplot as plt
-import subprocess
-import re
 import seaborn as sns
 import pandas as pd
 import matplotlib.patches as  mpatches
 
-MAIN_PRED_COLOUR = "#006400"
-MINOR_PRED_COLOUR = "#90EE90"
-MEAN_PRED_COLOUR = "#48A948"
-MAIN_SIM_COLOUR = "#3941B3"
-MINOR_SIM_COLOUR = "#3996B3"
-MEAN_SIM_COLOUR = "#396cb3"
-OTHER_COLOUR = "gray"
 INTERESTING_DESHAW_PROTEINS = {"Protein_G": {"folded_PDB": "1MI0", "Abbreviation":"NuG2","Start":5,"Mutations":[41], "Interesting frames": {"Folded": 140, "Unfolded": 310}},"Villin": {"folded_PDB": "2F4K", "Abbreviation":"2F4K","Mutations":[23,26,28],"Experiment_mutations":[25]}, "NTL9": {"folded_PDB": "2hba", "Abbreviation":"NTL9", "Length": 37,"Mutations":[11], "Interesting frames":{"Unfolded":280, "Folded": 580}}}
 FRAMES_PER = 2000
-TO_MICRO = 10000000
-SIMULATION_SAMPLING = 100 
+SIMULATION_SAMPLING = 100
 FOLDING_SAMPLING = 20 # on top of simulation subsampling
-FRAMES_TO_AVERAGE = 20
-FRAMES_TO_EXCLUDE = 5
-
-plt.rcParams.update({
-    'font.size': 12,
-    'xtick.labelsize': 10,  # Size of x-axis tick labels
-    'ytick.labelsize': 10,  # Size of y-axis tick labels
-    'axes.spines.top' : False,
-    'axes.spines.right' : False,
-})
-
-def get_frame_number(path):
-    match = re.search(r"frame_(\d+)", str(path))
-    return int(match.group(1)) if match else -1
-
-def get_dcd_number(path):
-    match = re.search(r"protein-(\d+).dcd", str(path))
-    return int(match.group(1)) if match else -1
-
-def find_bigger_cluster(clusters):
-    mode = stats.mode([it for it in clusters if it>0]).mode
-    other = int((mode-1)**2)
-    return mode, other
 
 def make_long_plot(simulation, all_rmsds, ref, decision_boundary, save_path, simulation_sampling=SIMULATION_SAMPLING):
     plt.rcParams.update({'axes.spines.right' : True,})    
@@ -146,11 +118,6 @@ def make_long_plot_q_colour(simulation, all_rmsds, ref, decision_boundary, save_
     plt.savefig(save_path, format="pdf", bbox_inches='tight', transparent=True)
     plt.close()
 
-
-def download_pdb(pdb_code:str, out_path:Path):
-    command = f'pdb_fetch {pdb_code} | pdb_selmodel -1 | pdb_selchain -A | pdb_delhetatm | pdb_delinsertion | pdb_reres -1 | pdb_tidy | grep ^ATOM | grep -E "ALA|ARG|ASN|ASP|CYS|GLU|GLN|GLY|HIS|ILE|LEU|LYS|MET|PHE|PRO|SER|THR|TRP|TYR|VAL|SEC|PYL|HCY" > {out_path}'
-    subprocess.run(command, shell=True, check=True)
-    pass  
 
 def make_sns_plot(point_list, plt_title,num_predictions=1, save_path=None, variance=None):
     plt.rcParams.update({'axes.spines.right' : False,})
